@@ -1,0 +1,89 @@
+{
+    "name": "jefftp",
+    "displayName": "JEFFTP",
+    "description": "SFTP extension for VSCode",
+    "version": "0.0.2",
+    "publisher": "casperpas",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/CasperPas/jefftp"
+    },
+    "engines": {
+        "vscode": "^1.19.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onCommand:extension.sftp.upload_current",
+        "onCommand:extension.sftp.upload_open_files",
+        "onCommand:extension.sftp.upload_context",
+        "workspaceContains:.vscode/sftp.json"
+    ],
+    "main": "./out/extension",
+    "contributes": {
+        "menus": {
+            "editor/title/context": [
+                {
+                    "command": "extension.sftp.upload_current",
+                    "group": "jefftp"
+                }
+            ],
+            "editor/title": [
+                {
+                    "command": "extension.sftp.upload_open_files",
+                    "group": "jefftp"
+                }
+            ],
+            "editor/context": [
+                {
+                    "command": "extension.sftp.upload_current",
+                    "group": "jefftp"
+                }
+            ],
+            "explorer/context": [
+                {
+                    "command": "extension.sftp.upload_context",
+                    "group": "jefftp"
+                }
+            ]
+        },
+        "commands": [
+            {
+                "command": "extension.sftp.upload_current",
+                "title": "Upload Current File",
+                "category": "jefftp"
+            },
+            {
+                "command": "extension.sftp.upload_open_files",
+                "title": "Upload Opening Files",
+                "category": "jefftp"
+            },
+            {
+                "command": "extension.sftp.upload_context",
+                "title": "Upload File/Folder",
+                "category": "jefftp"
+            }
+        ]
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "postinstall": "node ./node_modules/vscode/bin/install",
+        "test": "npm run compile && node ./node_modules/vscode/bin/test"
+    },
+    "devDependencies": {
+        "@types/async": "^2.0.47",
+        "@types/mocha": "^2.2.42",
+        "@types/node": "^7.0.43",
+        "@types/ssh2-sftp-client": "^2.0.0",
+        "typescript": "^2.6.1",
+        "vscode": "^1.1.6"
+    },
+    "dependencies": {
+        "async": "^2.6.0",
+        "jsftp": "^2.1.3",
+        "ssh2-sftp-client": "^2.0.1"
+    }
+}
