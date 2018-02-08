@@ -1,28 +1,25 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as SFTP from 'ssh2-sftp-client';
 import * as async from 'async';
 import { execFile } from 'child_process';
 
-import { upload } from './sync';
+import { Sync } from './sync';
+import { Log } from './log';
 import { getConfig, getConfigPath } from './config';
-import { Configurations } from '../interfaces';
+import { Configurations, FileTransferInfo } from '../interfaces';
 import { SFTPWrapper } from 'ssh2';
 import { resolve } from 'path';
 
-enum UploadStatus {
-    Ongoing,
-    Success,
-    Failed
-}
+const TRANSFER_CHANNEL = "JEFFTP: Transfer";
 
 export class JEFFTP {
-
-    private out: vscode.OutputChannel;
     private config: Configurations;
-    private uploadOutputHash: { [id: string]: UploadStatus }
+    private sync: Sync;
+    // private transferLogStartLine
+    private transferingList: FileTransferInfo[];
+    private transferOutputHash: { [id: string]: number }
 
     constructor(private context: vscode.ExtensionContext) {
         this.initialize();
@@ -32,17 +29,19 @@ export class JEFFTP {
         this.registerCommand("extension.sftp.upload_current", this.upload, this);
         this.registerCommand("extension.sftp.upload_context", this.upload, this);
         this.registerCommand("extension.sftp.upload_open_files", this.uploadOpenFiles, this);
-        this.out = vscode.window.createOutputChannel("JEFFTP");
-        this.out.append("Initializing JEFFTP...");
+        Log.append("Initializing JEFFTP...");
         vscode.workspace.onDidSaveTextDocument((doc) => {
             if (doc.uri.fsPath === getConfigPath()) {
-                this.out.appendLine("Config file has changed!");
+                Log.appendLine("Config file has changed!");
                 this.config = getConfig();
+                this.sync.updateConfig(this.config);
             } else {
                 this.uploadOnSave();
             }
         });
-        this.out.appendLine("Done!");
+        this.config = getConfig();
+        this.sync = new Sync(this.config);
+        Log.appendLine("Done!");
     }
 
     uploadOnSave() {
@@ -89,7 +88,7 @@ export class JEFFTP {
         let dirsHash = {};
         filePaths = filePaths.filter(filePath => {
             if (filePath.indexOf(vscode.workspace.rootPath) !== 0) {
-                this.out.appendLine(`File '${filePath}' does not belong to your current project`);
+                Log.appendLine(`File '${filePath}' does not belong to your current project`);
                 return false;
             }
             return true;
@@ -97,14 +96,14 @@ export class JEFFTP {
 
         const cfg = this.getConfig();
 
-        let fileRemotePaths = filePaths.map(filePath => {
+        let fileRemotePaths: FileTransferInfo[] = filePaths.map(filePath => {
             const fileRelativePath = filePath.replace(vscode.workspace.rootPath, '');
             const fileRemotePath = path.join(cfg.remote_path, fileRelativePath);
             dirsHash[path.dirname(fileRemotePath)] = true;
             return {
-                local: filePath,
-                remote: fileRemotePath
-            };
+                fromPath: filePath,
+                toPath: fileRemotePath
+            } as FileTransferInfo;
         });
 
         let remoteDirs = Object.keys(dirsHash).sort((a, b) => {
@@ -119,25 +118,17 @@ export class JEFFTP {
             return list;
         }, []);
 
-        const keyPath = cfg.ssh_key_file.replace('~', os.homedir());
-        const privateKey = fs.readFileSync(keyPath).toString();
-        // console.log(`Connected: ${connected}`);
-        const sftp = new SFTP();
-        this.out.append(`Connecting to ${cfg.host} as ${cfg.user}...`);
-        sftp.connect({
-            host: cfg.host,
-            port: cfg.port || 22,
-            username: cfg.user,
-            privateKey: privateKey
-        }).then((abc: SFTPWrapper) => {
+        this.resetTransferLog();
+        Log.append(`Connecting to ${cfg.host} as ${cfg.user}...`, TRANSFER_CHANNEL);
+        this.sync.connect().then(() => {
             // Create folders before upload files
-            this.out.appendLine("success!");
+            Log.appendLine("success!", TRANSFER_CHANNEL);
             return new Promise<void>((resolve, reject) => {
                 async.eachLimit(
                     remoteDirs,
                     cfg.connection_limit,
                     (dir, cb) => {
-                        sftp.mkdir(dir, true)
+                        this.sync.mkdir(dir, true)
                             .then(() => cb(null))
                             .catch(err => cb(err));
                     },
@@ -159,14 +150,19 @@ export class JEFFTP {
                     fileRemotePaths,
                     cfg.connection_limit,
                     (file, cb) => {
-                        sftp.put(file.local, file.remote, true, 'UTF-8')
+                        file.progress = 0;
+                        this.updateTransferStatus(file);
+                        this.sync.put(file.fromPath, file.toPath, true)
                             .then(() => {
-                                this.out.appendLine(`'${file.local}' has been uploaded successfully to '${file.remote}'`);
+                                file.progress = 100;
+                                this.updateTransferStatus(file);
+                                Log.appendLine(`'${file.fromPath}' has been uploaded successfully to '${file.toPath}'`);
                                 cb(null);
                             })
                             .catch(err => {
-                                this.out.appendLine(`Failed to upload '${file.local}'!`);
-                                // cb(err);
+                                file.progress = -1;
+                                this.updateTransferStatus(file);
+                                Log.appendLine(`Failed to upload '${file.fromPath}'!`);
                                 cb(null);
                             });
                     },
@@ -221,5 +217,31 @@ export class JEFFTP {
     private registerCommand(name: string, callback: (args: any[]) => any, thisArg?: any) {
         let disposable = vscode.commands.registerCommand(name, callback, thisArg);
         this.context.subscriptions.push(disposable);
+    }
+
+    private resetTransferLog() {
+        this.transferingList = [];
+        this.transferOutputHash = {};
+        Log.clear(TRANSFER_CHANNEL);
+        Log.show(TRANSFER_CHANNEL);
+    }
+    private updateTransferStatus(file: FileTransferInfo) {
+        const transferHashKey = `${file.fromPath} -> ${file.toPath}`;
+        if (this.transferOutputHash[transferHashKey] == undefined) {
+            this.transferOutputHash[transferHashKey] = this.transferingList.length;
+            this.transferingList.push(file);
+            Log.appendLine(`Transfering ${file.fromPath} to ${file.toPath}...`, TRANSFER_CHANNEL);
+        }
+        const line = this.transferOutputHash[transferHashKey] + 1;
+        switch (file.progress) {
+            case -1:
+                Log.append('Failed!', TRANSFER_CHANNEL, line);
+                break;
+            case 100:
+                Log.append('Success!', TRANSFER_CHANNEL, line);
+                break;
+            default:
+                break;
+        }
     }
 }
