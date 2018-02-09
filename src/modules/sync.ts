@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as SFTP from 'ssh2-sftp-client';
 import * as FTP from 'ftp';
 import { SFTPWrapper } from 'ssh2';
-import { Configurations } from '../interfaces';
+import { Configurations, FileInfo } from '../interfaces';
 import { reject } from 'async';
 import { resolve } from 'dns';
 
@@ -37,8 +37,35 @@ export class Sync {
         }
     }
 
-//     list(remoteFilePath: string): Promise<sftp.FileInfo[]>;
-//   get(remoteFilePath: string, useCompression?: boolean, encoding?: string): Promise<NodeJS.ReadableStream>;
+    list(remoteFilePath: string): Promise<FileInfo[]> {
+        switch (this.config.type) {
+            case 'sftp':
+                return this._listSFTP(remoteFilePath);
+
+            case 'ftp':
+                return this._listFTP(remoteFilePath);
+
+            default:
+                return new Promise<FileInfo[]>((resolve, reject) => {
+                    reject("Invalid connection type!");
+                });
+        }
+    }
+
+    get(remoteFilePath: string, useCompression?: boolean): Promise<NodeJS.ReadableStream> {
+        switch (this.config.type) {
+            case 'sftp':
+                return this._getSFTP(remoteFilePath, useCompression);
+
+            case 'ftp':
+                return this._getFTP(remoteFilePath, useCompression);
+
+            default:
+                return new Promise<NodeJS.ReadableStream>((resolve, reject) => {
+                    reject("Invalid connection type!");
+                });
+        }
+    }
 
     put(input: string | Buffer | NodeJS.ReadableStream, remoteFilePath: string, useCompression?: boolean): Promise<void> {
         switch (this.config.type) {
@@ -70,9 +97,9 @@ export class Sync {
         }
     }
 
-//     rmdir(remoteFilePath: string, recursive?: boolean): Promise<void>;
-//   delete(remoteFilePath: string): Promise<void>;
-//   rename(remoteSourcePath: string, remoteDestPath: string): Promise<void>;
+    //     rmdir(remoteFilePath: string, recursive?: boolean): Promise<void>;
+    //   delete(remoteFilePath: string): Promise<void>;
+    //   rename(remoteSourcePath: string, remoteDestPath: string): Promise<void>;
 
     private _connectSFTP(): Promise<void> {
         if (!this.sftp) {
@@ -113,6 +140,75 @@ export class Sync {
                 password: this.config.password,
                 connTimeout: this.config.connect_timeout,
                 keepalive: this.config.keepalive
+            });
+        });
+    }
+
+    private _listSFTP(remoteFilePath: string): Promise<FileInfo[]> {
+        if (!this.sftp) {
+            return Promise.reject("Not connected yet!");
+        }
+        return this.sftp.list(remoteFilePath).then(items => {
+            return items.map<FileInfo>(item => {
+                return {
+                    name: item.name,
+                    type: item.type,
+                    modifyTime: item.modifyTime,
+                    group: item.group.toString(),
+                    owner: item.owner.toString(),
+                    rights: item.rights,
+                    size: item.size
+                } as FileInfo;
+            });
+        });
+    }
+
+    private _listFTP(remoteFilePath: string): Promise<FileInfo[]> {
+        if (!this.ftp) {
+            return Promise.reject("Not connected yet!");
+        }
+
+        return new Promise<FileInfo[]>((resolve, reject) => {
+            this.ftp.list(remoteFilePath, (err, items) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                resolve(
+                    items.map<FileInfo>(item => {
+                        return {
+                            name: item.name,
+                            type: item.type,
+                            modifyTime: item.date.getTime() / 1000,
+                            group: item.group,
+                            owner: item.owner,
+                            rights: item.rights,
+                            size: parseInt(item.size)
+                        } as FileInfo;
+                    })
+                );
+            });
+        });
+    }
+
+    private _getSFTP(remoteFilePath: string, useCompression?: boolean): Promise<NodeJS.ReadableStream> {
+        if (!this.sftp) {
+            return Promise.reject("Not connected yet!");
+        }
+        return this.sftp.get(remoteFilePath, useCompression, 'UTF-8');
+    }
+
+    private _getFTP(remoteFilePath: string, useCompression?: boolean): Promise<NodeJS.ReadableStream> {
+        if (!this.ftp) {
+            return Promise.reject("Not connected yet!");
+        }
+        return new Promise<NodeJS.ReadableStream>((resolve, reject) => {
+            this.ftp.get(remoteFilePath, useCompression, (err, stream) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                resolve(stream);
             });
         });
     }

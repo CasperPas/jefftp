@@ -11,6 +11,7 @@ import { getConfig, getConfigPath } from './config';
 import { Configurations, FileTransferInfo } from '../interfaces';
 import { SFTPWrapper } from 'ssh2';
 import { resolve } from 'path';
+import { ExplorerTreeDataProvider, ExNode, EXPLORER_SCHEME } from './explorer';
 
 const TRANSFER_CHANNEL = "JEFFTP: Transfer";
 
@@ -26,10 +27,15 @@ export class JEFFTP {
     }
 
     initialize() {
+        Log.append("Initializing JEFFTP...");
+
         this.registerCommand("extension.sftp.upload_current", this.upload, this);
         this.registerCommand("extension.sftp.upload_context", this.upload, this);
         this.registerCommand("extension.sftp.upload_open_files", this.uploadOpenFiles, this);
-        Log.append("Initializing JEFFTP...");
+        this.registerCommand('extension.sftp.explorer.open', this._openExplorerItem, this);
+        this.registerCommand('extension.sftp.explorer.show', this.showExplorer, this);
+        this.registerCommand('extension.sftp.explorer.hide', this.hideExplorer, this);
+
         vscode.workspace.onDidSaveTextDocument((doc) => {
             if (doc.uri.fsPath === getConfigPath()) {
                 Log.appendLine("Config file has changed!");
@@ -41,7 +47,32 @@ export class JEFFTP {
         });
         this.config = getConfig();
         this.sync = new Sync(this.config);
+
+        const explorerProvider = new ExplorerTreeDataProvider();
+        vscode.window.registerTreeDataProvider('jefftpExplorer', explorerProvider);
+        vscode.workspace.registerTextDocumentContentProvider(EXPLORER_SCHEME, explorerProvider);
+        this.hideExplorer();
+
         Log.appendLine("Done!");
+    }
+
+    private _openExplorerItem(args: any) {
+        const node: ExNode = Array.isArray(args) ? args[0] : args;
+        vscode.workspace.openTextDocument(node.resource).then(document => {
+            vscode.window.showTextDocument(document);
+        });
+    }
+
+    private showExplorer() {
+        this.toggleExplorer(true);
+    }
+
+    private hideExplorer() {
+        this.toggleExplorer(false);
+    }
+
+    private toggleExplorer(enable: boolean) {
+        vscode.commands.executeCommand('setContext', 'treeViewEnabled', enable);
     }
 
     uploadOnSave() {

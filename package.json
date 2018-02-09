@@ -22,7 +22,26 @@
     ],
     "main": "./out/extension",
     "contributes": {
+        "views": {
+            "explorer": [
+                {
+                    "id": "jefftpExplorer",
+                    "name": "JEFFTP Explorer",
+                    "when": "treeViewEnabled"
+                }
+            ]
+        },
         "menus": {
+            "commandPalette": [
+                {
+                    "command": "extension.sftp.explorer.download",
+                    "when": "view == jefftpExplorer"
+                },
+                {
+                    "command": "extension.sftp.explorer.open",
+                    "when": "view == jefftpExplorer"
+                }
+            ],
             "editor/title/context": [
                 {
                     "command": "extension.sftp.upload_current",
@@ -46,23 +65,53 @@
                     "command": "extension.sftp.upload_context",
                     "group": "jefftp"
                 }
+            ],
+            "view/item/context": [
+                {
+                    "command": "extension.sftp.explorer.download",
+                    "when": "view == jefftpExplorer"
+                },
+                {
+                    "command": "extension.sftp.explorer.open",
+                    "when": "view == jefftpExplorer && viewItem == file"
+                }
             ]
         },
         "commands": [
             {
                 "command": "extension.sftp.upload_current",
                 "title": "Upload Current File",
-                "category": "jefftp"
+                "category": "JEFFTP"
             },
             {
                 "command": "extension.sftp.upload_open_files",
                 "title": "Upload Opening Files",
-                "category": "jefftp"
+                "category": "JEFFTP"
             },
             {
                 "command": "extension.sftp.upload_context",
                 "title": "Upload File/Folder",
-                "category": "jefftp"
+                "category": "JEFFTP"
+            },
+            {
+                "command": "extension.sftp.explorer.download",
+                "title": "Download From Server",
+                "category": "JEFFTP"
+            },
+            {
+                "command": "extension.sftp.explorer.open",
+                "title": "Open Resource",
+                "category": "JEFFTP Explorer"
+            },
+            {
+                "command": "extension.sftp.explorer.show",
+                "title": "Show Remote Explorer",
+                "category": "JEFFTP Explorer"
+            },
+            {
+                "command": "extension.sftp.explorer.hide",
+                "title": "Hide Remote Explorer",
+                "category": "JEFFTP Explorer"
             }
         ]
     },
