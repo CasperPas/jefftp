@@ -35,11 +35,11 @@
             "commandPalette": [
                 {
                     "command": "extension.sftp.explorer.download",
-                    "when": "view == jefftpExplorer"
+                    "when": "false"
                 },
                 {
                     "command": "extension.sftp.explorer.open",
-                    "when": "view == jefftpExplorer"
+                    "when": "false"
                 }
             ],
             "editor/title/context": [
@@ -128,8 +128,8 @@
         "@types/mocha": "^2.2.42",
         "@types/node": "^7.0.43",
         "@types/ssh2-sftp-client": "^2.0.0",
-        "typescript": "^2.6.1",
-        "vscode": "^1.1.6"
+        "typescript": "^2.7.1",
+        "vscode": "^1.1.10"
     },
     "dependencies": {
         "async": "^2.6.0",

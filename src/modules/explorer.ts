@@ -11,7 +11,8 @@ import {
     workspace,
     TextDocumentContentProvider,
     CancellationToken,
-    ProviderResult
+    ProviderResult,
+    ProgressLocation
 } from 'vscode';
 import * as path from 'path';
 import { getConfig, getConfigPath } from './config';
@@ -122,7 +123,14 @@ export class ExplorerTreeDataProvider implements TreeDataProvider<ExNode>, TextD
     }
 
     public provideTextDocumentContent(uri: Uri, token: CancellationToken): ProviderResult<string> {
-        return sync.connect().then(() => {
+        return window.withProgress({
+            location: ProgressLocation.Window,
+            title: "Loading remote file"
+        }, async (progress) => {
+            progress.report({ message: `JEFFTP: Connecting to '${config.host}'` });
+            await sync.connect();
+
+            progress.report({ message: `JEFFTP: Loading '${uri.fsPath}'` });
             return new Promise<string>((resolve, reject) => {
                 sync.get(uri.fsPath, true).then(stream => {
                     let content = '';

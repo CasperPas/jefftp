@@ -14,7 +14,7 @@ export function getConfigPath() {
 export const DEFAULT_CONFIGS: Configurations = {
     "type": "sftp",
     "save_before_upload": false,
-    "upload_on_save": true,
+    "upload_on_save": false,
     "sync_down_on_open": false,
     "sync_skip_deletes": false,
     "sync_same_age": true,
