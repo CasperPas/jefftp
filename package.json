@@ -2,7 +2,7 @@
     "name": "jefftp",
     "displayName": "JEFFTP",
     "description": "SFTP extension for VSCode",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "publisher": "casperpas",
     "repository": {
         "type": "git",
@@ -20,6 +20,7 @@
         "onCommand:extension.sftp.upload_context",
         "workspaceContains:.vscode/sftp.json"
     ],
+    "icon": "icon.png",
     "main": "./out/extension",
     "contributes": {
         "views": {
@@ -135,6 +136,7 @@
         "async": "^2.6.0",
         "ftp": "^0.3.10",
         "jsftp": "^2.1.3",
+        "mkdirp": "^0.5.1",
         "ssh2-sftp-client": "^2.0.1"
     }
 }

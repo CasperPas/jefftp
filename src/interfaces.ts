@@ -44,6 +44,11 @@ export interface FileTransferInfo {
     progress?: number;  // [0, 100]; -1: Failed!
 }
 
+export interface TransferPathInfo {
+    files: FileTransferInfo[];
+    dirs: string[];
+}
+
 export interface LogOutputChannel {
     out: OutputChannel;
     lines: string[];

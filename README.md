@@ -17,17 +17,15 @@ Using this extension with VSCode 1.19.0+ would be great
 
 All connection settings will be placed in `${workspaceFolder}/.vscode/sftp.json`
 
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: enable/disable this extension
-* `myExtension.thing`: set to `blah` to do something
-
 ## Known Issues
 
 
 ## Release Notes
+
+### 0.2.0
+
+* Add download File/Folder from Remote Explorer
+* Bug fixes
 
 ### 0.1.0
 
