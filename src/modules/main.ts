@@ -15,6 +15,7 @@ import { resolve } from 'path';
 import { ExplorerTreeDataProvider, ExNode, EXPLORER_SCHEME } from './explorer';
 
 const TRANSFER_CHANNEL = "JEFFTP: Transfer";
+const MAX_RETRY_NUM = 5;
 
 export class JEFFTP {
     private config: Configurations;
@@ -126,70 +127,77 @@ export class JEFFTP {
         // }
     }
 
-    uploadFiles(filePaths: string[]) {
+    _createFolders(dirs: string[], cfg: Configurations): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
+            async.eachLimit(
+                dirs,
+                cfg.connection_limit,
+                (dir, cb) => {
+                    this.sync.mkdir(dir, true)
+                        .then(() => cb(null))
+                        .catch(err => cb(err));
+                },
+                err => {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
+                    resolve();
+                }
+            );
+        });
+    }
+
+    _transferFiles(files: FileTransferInfo[], cfg: Configurations): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
+            async.eachLimit(
+                files,
+                cfg.connection_limit,
+                (file, cb) => {
+                    file.progress = 0;
+                    this.updateTransferStatus(file);
+                    this.sync.put(file.fromPath, file.toPath, true)
+                        .then(() => {
+                            file.progress = 100;
+                            this.updateTransferStatus(file);
+                            Log.appendLine(`'${file.fromPath}' has been uploaded successfully to '${file.toPath}'`);
+                            cb(null);
+                        })
+                        .catch(err => {
+                            file.progress = -1;
+                            this.updateTransferStatus(file);
+                            Log.appendLine(`Failed to upload '${file.fromPath}'!`);
+                            cb(null);
+                        });
+                },
+                err => {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
+                    resolve();
+                }
+            );
+        });
+    }
+
+    uploadFiles(filePaths: string[], retries?: number) {
         const cfg = this.getConfig();
         const transferInfo = this.preparePaths(filePaths, vscode.workspace.rootPath, cfg.remote_path);
 
         this.resetTransferLog();
         Log.append(`Connecting to ${cfg.host} as ${cfg.user}...`, TRANSFER_CHANNEL);
-        this.sync.connect().then(() => {
-            // Create folders before upload files
-            Log.appendLine("success!", TRANSFER_CHANNEL);
-            return new Promise<void>((resolve, reject) => {
-                async.eachLimit(
-                    transferInfo.dirs,
-                    cfg.connection_limit,
-                    (dir, cb) => {
-                        this.sync.mkdir(dir, true)
-                            .then(() => cb(null))
-                            .catch(err => cb(err));
-                    },
-                    err => {
-                        if (err) {
-                            reject(err);
-                            return;
-                        }
-                        resolve();
-                    }
-                );
+        this.sync.connect()
+            .then(() => Log.appendLine("success!", TRANSFER_CHANNEL))
+            .then(() => this._createFolders(transferInfo.dirs, cfg))
+            .then(() => this._transferFiles(transferInfo.files, cfg))
+            .catch(err => {
+                retries = retries || 0;
+                if (retries < MAX_RETRY_NUM) {
+                    this.uploadFiles(filePaths, retries + 1);
+                }
+                console.log(err);
             });
-        }, err => {
-            console.log(err);
-        }).then(() => {
-            // Upload multiple files
-            return new Promise<void>((resolve, reject) => {
-                async.eachLimit(
-                    transferInfo.files,
-                    cfg.connection_limit,
-                    (file, cb) => {
-                        file.progress = 0;
-                        this.updateTransferStatus(file);
-                        this.sync.put(file.fromPath, file.toPath, true)
-                            .then(() => {
-                                file.progress = 100;
-                                this.updateTransferStatus(file);
-                                Log.appendLine(`'${file.fromPath}' has been uploaded successfully to '${file.toPath}'`);
-                                cb(null);
-                            })
-                            .catch(err => {
-                                file.progress = -1;
-                                this.updateTransferStatus(file);
-                                Log.appendLine(`Failed to upload '${file.fromPath}'!`);
-                                cb(null);
-                            });
-                    },
-                    err => {
-                        if (err) {
-                            reject(err);
-                            return;
-                        }
-                        resolve();
-                    }
-                );
-            });
-        }).catch(err => {
-            console.log(err);
-        });
     }
 
     uploadFolder(folderPath: string) {

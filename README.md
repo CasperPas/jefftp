@@ -1,6 +1,7 @@
 # JEFFTP (Just Enough For FTP)
 
 [Visual Studio Code](http://code.visualstudio.com) (VSCode) extension that helps you transfer your files to a server using SFTP/FTP/FTPS.
+This plugin is still in development & welcome developers to contribute (fork & create pull requests).
 
 ## Features
 
@@ -21,6 +22,10 @@ All connection settings will be placed in `${workspaceFolder}/.vscode/sftp.json`
 
 
 ## Release Notes
+
+### 0.2.2
+
+* Keep current connection instead of reconnect everytime
 
 ### 0.2.0
 

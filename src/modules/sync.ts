@@ -11,10 +11,16 @@ import { resolve } from 'dns';
 
 export class Sync {
 
-    sftp: SFTP;
-    ftp: FTP;
+    private sftp: SFTP;
+    private ftp: FTP;
+    private _connected: boolean;
+
+    get isConnected(): boolean {
+        return this._connected;
+    }
 
     constructor(private config: Configurations) {
+        this._connected = false;
     }
 
     updateConfig(cfg: Configurations) {
@@ -105,6 +111,9 @@ export class Sync {
         if (!this.sftp) {
             this.sftp = new SFTP();
         }
+        if (this._connected) {
+            return Promise.resolve();
+        }
         let cfg = {
             host: this.config.host,
             port: this.config.port || 22,
@@ -116,7 +125,24 @@ export class Sync {
             const keyPath = this.config.ssh_key_file.replace('~', os.homedir());
             cfg.privateKey = fs.readFileSync(keyPath).toString();
         }
-        return this.sftp.connect(cfg).then((abc: SFTPWrapper) => {
+        return this.sftp.connect(cfg).then((wrapper: SFTPWrapper) => {
+            this._connected = true;
+            wrapper.on('ready', () => {
+                console.log("SFTP connected");
+                this._connected = true;
+            });
+            wrapper.on('close', () => {
+                console.log("SFTP disconnected");
+                this._connected = false;
+            });
+            wrapper.on('end', () => {
+                console.log("SFTP disconnected");
+                this._connected = false;
+            });
+            wrapper.on('error', (err) => {
+                console.log("SFTP Error", err);
+                this._connected = false;
+            });
             return;
         });
     }
@@ -126,13 +152,25 @@ export class Sync {
             if (!this.ftp) {
                 this.ftp = new FTP();
             }
+            if (this._connected) {
+                return Promise.resolve();
+            }
             this.ftp.once('ready', () => {
+                this._connected = true;
                 resolve();
             });
             this.ftp.once('error', err => {
+                this._connected = false;
                 reject(err);
             });
-            this.ftp.put
+            this.ftp.once('close', err => {
+                this._connected = false;
+                console.log("FTP disconnected");
+            });
+            this.ftp.once('end', err => {
+                this._connected = false;
+                console.log("FTP disconnected");
+            });
             this.ftp.connect({
                 host: this.config.host,
                 port: this.config.port,
@@ -148,7 +186,7 @@ export class Sync {
         if (!this.sftp) {
             return Promise.reject("Not connected yet!");
         }
-        return this.sftp.list(remoteFilePath).then(items => {
+        var promise = this.sftp.list(remoteFilePath).then(items => {
             return items.map<FileInfo>(item => {
                 return {
                     name: item.name,
@@ -161,6 +199,11 @@ export class Sync {
                 } as FileInfo;
             });
         });
+        promise.catch(err => {
+            console.log(err);
+            this._connected = false;
+        });
+        return promise;
     }
 
     private _listFTP(remoteFilePath: string): Promise<FileInfo[]> {
@@ -171,6 +214,7 @@ export class Sync {
         return new Promise<FileInfo[]>((resolve, reject) => {
             this.ftp.list(remoteFilePath, (err, items) => {
                 if (err) {
+                    this._connected = false;
                     reject(err);
                     return;
                 }
@@ -195,7 +239,11 @@ export class Sync {
         if (!this.sftp) {
             return Promise.reject("Not connected yet!");
         }
-        return this.sftp.get(remoteFilePath, useCompression, 'UTF-8');
+        var promise = this.sftp.get(remoteFilePath, useCompression, 'UTF-8');
+        promise.catch(err => {
+            this._connected = false;
+        });
+        return promise;
     }
 
     private _getFTP(remoteFilePath: string, useCompression?: boolean): Promise<NodeJS.ReadableStream> {
@@ -205,6 +253,7 @@ export class Sync {
         return new Promise<NodeJS.ReadableStream>((resolve, reject) => {
             this.ftp.get(remoteFilePath, useCompression, (err, stream) => {
                 if (err) {
+                    this._connected = false;
                     reject(err);
                     return;
                 }
@@ -228,6 +277,7 @@ export class Sync {
             }
             this.ftp.put(input, remoteFilePath, useCompression, err => {
                 if (err) {
+                    this._connected = false;
                     reject(err);
                 } else {
                     resolve();
@@ -251,6 +301,7 @@ export class Sync {
             }
             this.ftp.mkdir(remoteFilePath, recursive, err => {
                 if (err) {
+                    this._connected = false;
                     reject(err);
                 } else {
                     resolve();
