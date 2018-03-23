@@ -23,6 +23,10 @@ All connection settings will be placed in `${workspaceFolder}/.vscode/sftp.json`
 
 ## Release Notes
 
+### 0.2.3
+
+* Fix remote file view
+
 ### 0.2.2
 
 * Keep current connection instead of reconnect everytime
@@ -34,7 +38,7 @@ All connection settings will be placed in `${workspaceFolder}/.vscode/sftp.json`
 
 ### 0.1.0
 
-Initial release of JEFFTP
+* Initial release of JEFFTP
 
 ## License
 [MIT](https://github.com/CasperPas/jefftp/blob/master/LICENSE)

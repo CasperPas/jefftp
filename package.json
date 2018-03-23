@@ -2,7 +2,7 @@
     "name": "jefftp",
     "displayName": "JEFFTP",
     "description": "SFTP extension for VSCode",
-    "version": "0.2.2",
+    "version": "0.2.3",
     "publisher": "casperpas",
     "repository": {
         "type": "git",

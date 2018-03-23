@@ -62,7 +62,8 @@ export class JEFFTP {
 
     private _openExplorerItem(args: any) {
         const node: ExNode = Array.isArray(args) ? args[0] : args;
-        let uri = vscode.Uri.parse(`untitled:jefftp::${node.resource.fsPath}`);
+        // let uri = vscode.Uri.parse(`untitled:jefftp::${node.resource.fsPath}`);
+        let uri = vscode.Uri.parse(`${EXPLORER_SCHEME}:${node.resource.fsPath}`);
         vscode.workspace.openTextDocument(uri).then(document => {
             vscode.window.showTextDocument(document).then(() => {
                 // setTimeout(() => {
