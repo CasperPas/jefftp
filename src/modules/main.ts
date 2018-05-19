@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as SFTP from 'ssh2-sftp-client';
 import * as async from 'async';
 import { execFile } from 'child_process';
 import * as mkdirp from 'mkdirp';
@@ -10,8 +9,6 @@ import { Sync } from './sync';
 import { Log } from './log';
 import { getConfig, getConfigPath } from './config';
 import { Configurations, FileTransferInfo, TransferPathInfo } from '../interfaces';
-import { SFTPWrapper } from 'ssh2';
-import { resolve } from 'path';
 import { ExplorerTreeDataProvider, ExNode, EXPLORER_SCHEME } from './explorer';
 
 const TRANSFER_CHANNEL = "JEFFTP: Transfer";
@@ -23,6 +20,8 @@ export class JEFFTP {
     // private transferLogStartLine
     private transferingList: FileTransferInfo[];
     private transferOutputHash: { [id: string]: number }
+    private fileTransferQueue: FileTransferInfo[];
+    private isTransfering: number;
 
     constructor(private context: vscode.ExtensionContext) {
         this.initialize();
@@ -55,7 +54,9 @@ export class JEFFTP {
         vscode.window.registerTreeDataProvider('jefftpExplorer', explorerProvider);
         vscode.workspace.registerTextDocumentContentProvider(EXPLORER_SCHEME, explorerProvider);
         this.hideExplorer();
-        this.showExplorer();
+        // this.showExplorer();
+        this.fileTransferQueue = [];
+        this.isTransfering = 0;
 
         Log.appendLine("Done!");
     }
@@ -135,7 +136,19 @@ export class JEFFTP {
                 cfg.connection_limit,
                 (dir, cb) => {
                     this.sync.mkdir(dir, true)
-                        .then(() => cb(null))
+                        .then(() => {
+                            if (cfg.dir_permissions != null) {
+                                this.sync.chmod(dir, cfg.dir_permissions)
+                                    .then(() => {
+                                        cb(null);
+                                    })
+                                    .catch(err => {
+                                        cb(null);
+                                    });
+                            } else {
+                                cb(null);
+                            }
+                        })
                         .catch(err => cb(err));
                 },
                 err => {
@@ -149,27 +162,57 @@ export class JEFFTP {
         });
     }
 
-    _transferFiles(files: FileTransferInfo[], cfg: Configurations): Promise<void> {
+    _enqueueFiles(files: FileTransferInfo[]): Promise<void> {
+        this.fileTransferQueue.push(...files);
+        return Promise.resolve();
+    }
+
+    _transferFiles(): Promise<void> {
+        if (this.isTransfering > 0) return Promise.resolve();
+
+        const cfg = this.getConfig();
         return new Promise<void>((resolve, reject) => {
-            async.eachLimit(
-                files,
-                cfg.connection_limit,
-                (file, cb) => {
-                    file.progress = 0;
-                    this.updateTransferStatus(file);
-                    this.sync.put(file.fromPath, file.toPath, true)
-                        .then(() => {
-                            file.progress = 100;
-                            this.updateTransferStatus(file);
-                            Log.appendLine(`'${file.fromPath}' has been uploaded successfully to '${file.toPath}'`);
-                            cb(null);
-                        })
-                        .catch(err => {
-                            file.progress = -1;
-                            this.updateTransferStatus(file);
-                            Log.appendLine(`Failed to upload '${file.fromPath}'!`);
-                            cb(null);
-                        });
+            async.whilst(
+                () => this.fileTransferQueue.length > 0,
+                callback => {
+                    let files = this.fileTransferQueue.splice(0, cfg.connection_limit);
+                    async.eachLimit(
+                        files,
+                        files.length,
+                        (file, cb) => {
+                            this.isTransfering++;
+                            file.progress = 0;
+                            // this.updateTransferStatus(file);
+                            this.sync.put(file.fromPath, file.toPath, cfg.use_compression)
+                                .then(() => {
+                                    this.isTransfering--;
+                                    file.progress = 100;
+                                    // this.updateTransferStatus(file);
+                                    Log.appendLine(`'${file.fromPath}' has been uploaded successfully to '${file.toPath}'`);
+                                    console.log(`'${file.fromPath}' has been uploaded successfully to '${file.toPath}'`);
+                                    if (cfg.file_permissions != null) {
+                                        this.sync.chmod(file.toPath, cfg.file_permissions)
+                                            .then(() => {
+                                                cb(null);
+                                            })
+                                            .catch(err => {
+                                                cb(null);
+                                            });
+                                    } else {
+                                        cb(null);
+                                    }
+                                })
+                                .catch(err => {
+                                    this.isTransfering--;
+                                    file.progress = -1;
+                                    this.updateTransferStatus(file);
+                                    console.log(err);
+                                    Log.appendLine(`Failed to upload '${file.fromPath}'!`);
+                                    cb(null);
+                                });
+                        },
+                        err => callback(err)
+                    );
                 },
                 err => {
                     if (err) {
@@ -186,12 +229,13 @@ export class JEFFTP {
         const cfg = this.getConfig();
         const transferInfo = this.preparePaths(filePaths, vscode.workspace.rootPath, cfg.remote_path);
 
-        this.resetTransferLog();
+        // this.resetTransferLog();
         Log.append(`Connecting to ${cfg.host} as ${cfg.user}...`, TRANSFER_CHANNEL);
         this.sync.connect()
             .then(() => Log.appendLine("success!", TRANSFER_CHANNEL))
             .then(() => this._createFolders(transferInfo.dirs, cfg))
-            .then(() => this._transferFiles(transferInfo.files, cfg))
+            .then(() => this._enqueueFiles(transferInfo.files))
+            .then(() => this._transferFiles())
             .catch(err => {
                 retries = retries || 0;
                 if (retries < MAX_RETRY_NUM) {

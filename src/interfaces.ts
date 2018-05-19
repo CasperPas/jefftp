@@ -17,6 +17,9 @@ export interface Configurations {
     remote_path: string;
     connect_timeout: number;
     connection_limit: number;
+    file_permissions: string;
+    dir_permissions: string;
+    use_compression: boolean;
     keepalive: number;
     ftp_passive_mode: boolean;
     ftp_obey_passive_host: boolean;

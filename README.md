@@ -23,6 +23,11 @@ All connection settings will be placed in `${workspaceFolder}/.vscode/sftp.json`
 
 ## Release Notes
 
+### 0.3.0
+
+* Add transfering queue
+* Ability to set files & folders permissions (on behalf of current user)
+
 ### 0.2.3
 
 * Fix remote file view

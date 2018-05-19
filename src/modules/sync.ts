@@ -24,6 +24,7 @@ export class Sync {
     }
 
     updateConfig(cfg: Configurations) {
+        this.disconnect();
         this.config = cfg;
     }
 
@@ -41,6 +42,11 @@ export class Sync {
                     reject("Invalid connection type!");
                 });
         }
+    }
+
+    disconnect() {
+        this._disconnectSFTP();
+        this._disconnectFTP();
     }
 
     list(remoteFilePath: string): Promise<FileInfo[]> {
@@ -103,6 +109,21 @@ export class Sync {
         }
     }
 
+    chmod(remoteFilePath: string, mode: string): Promise<void> {
+        switch (this.config.type) {
+            case 'sftp':
+                return this._chmodSFTP(remoteFilePath, mode);
+
+            case 'ftp':
+                return this._chmodFTP(remoteFilePath, mode);
+
+            default:
+                return new Promise<void>((resolve, reject) => {
+                    reject("Invalid connection type!");
+                });
+        }
+    }
+
     //     rmdir(remoteFilePath: string, recursive?: boolean): Promise<void>;
     //   delete(remoteFilePath: string): Promise<void>;
     //   rename(remoteSourcePath: string, remoteDestPath: string): Promise<void>;
@@ -152,23 +173,27 @@ export class Sync {
             if (!this.ftp) {
                 this.ftp = new FTP();
             }
-            if (this._connected) {
-                return Promise.resolve();
-            }
+            // TODO: Currently with FTP, always create new connection
+            // if (this._connected) {
+            //     resolve();
+            // }
             this.ftp.once('ready', () => {
                 this._connected = true;
                 resolve();
             });
             this.ftp.once('error', err => {
                 this._connected = false;
+                console.log(err);
                 reject(err);
             });
             this.ftp.once('close', err => {
                 this._connected = false;
+                console.log(err);
                 console.log("FTP disconnected");
             });
             this.ftp.once('end', err => {
                 this._connected = false;
+                console.log(err);
                 console.log("FTP disconnected");
             });
             this.ftp.connect({
@@ -180,6 +205,14 @@ export class Sync {
                 keepalive: this.config.keepalive
             });
         });
+    }
+
+    private _disconnectSFTP() {
+        this.sftp && this.sftp.end();
+    }
+
+    private _disconnectFTP() {
+        this.ftp && this.ftp.end();
     }
 
     private _listSFTP(remoteFilePath: string): Promise<FileInfo[]> {
@@ -300,6 +333,30 @@ export class Sync {
                 return;
             }
             this.ftp.mkdir(remoteFilePath, recursive, err => {
+                if (err) {
+                    this._connected = false;
+                    reject(err);
+                } else {
+                    resolve();
+                }
+            })
+        });
+    }
+
+    private _chmodSFTP(remoteFilePath: string, mode: string): Promise<void> {
+        if (!this.sftp) {
+            return Promise.reject("Not connected yet!");
+        }
+        return this.sftp.chmod(remoteFilePath, mode);
+    }
+
+    private _chmodFTP(remoteFilePath: string, mode: string): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
+            if (!this.ftp) {
+                reject("Not connected yet!");
+                return;
+            }
+            this.ftp.site(`chmod ${mode} ${remoteFilePath}`, err => {
                 if (err) {
                     this._connected = false;
                     reject(err);
